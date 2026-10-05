@@ -1,0 +1,1 @@
+-- Future purpose: define the PostgreSQL database schema.

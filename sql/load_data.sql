@@ -1,0 +1,1 @@
+-- Future purpose: load raw marketplace data into PostgreSQL.
