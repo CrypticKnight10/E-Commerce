@@ -51,6 +51,8 @@ It contains roughly 100,000 anonymized marketplace orders distributed across sev
 
 The multi-table structure will be used to practice relational database design, primary and foreign keys, joins, and ER diagrams.
 
+The raw Olist CSV files will be downloaded reproducibly into `data/raw/` and will not be committed to the repository.
+
 A separate Olist marketing-funnel dataset may be considered later if it supports a useful business question, but it is not part of the initial scope.
 
 ## Tools
@@ -105,6 +107,8 @@ ecommerce/
 │   ├── 01_business_analysis.ipynb
 │   ├── 02_customer_analysis.ipynb
 │   └── 03_delivery_prediction.ipynb
+├── scripts/
+│   └── download_data.py
 ├── dashboard/
 ├── images/
 ├── docs/
