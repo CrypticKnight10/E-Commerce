@@ -1,11 +1,39 @@
--- Calculates monthly unique order count, monthly total payment value, and monthly average order value.
+-- Overall Business Performance
+
+-- What is the distribution of orders by order status?
+SELECT
+    order_status,
+    COUNT(*) AS order_count
+FROM orders
+GROUP BY order_status
+ORDER BY order_count DESC;
+
+-- What is the total payment value contributed by customers?
+SELECT
+    SUM(payment_value) AS total_payment_value
+FROM order_payments;
+
+-- What is the overall average order value?
+-- AOV uses customer payment value divided by distinct orders.
+SELECT
+    ROUND(
+        SUM(payment_value)
+        / NULLIF(COUNT(DISTINCT order_id), 0),
+        2
+    ) AS avg_order_value
+FROM order_payments;
+
+-- Monthly Performance
+
+-- How do order volume, payment value, and AOV change by month?
+-- COUNT(DISTINCT order_id) prevents multiple payment rows from inflating order counts.
 SELECT
     TO_CHAR(DATE_TRUNC('month', orders.order_purchase_timestamp), 'YYYY-MM') AS month,
     COUNT(DISTINCT orders.order_id) AS order_count,
     SUM(order_payments.payment_value) AS monthly_payment_value,
     ROUND(
         SUM(order_payments.payment_value)
-        / COUNT(DISTINCT orders.order_id),
+        / NULLIF(COUNT(DISTINCT orders.order_id), 0),
         2
     ) AS avg_order_value
 FROM orders
@@ -14,7 +42,9 @@ JOIN order_payments
 GROUP BY month
 ORDER BY month;
 
--- Identifies product categories with the highest product sales value.
+-- Product / Category Performance
+
+-- Which product categories generate the most product sales value?
 SELECT
     product_category_name_translation.product_category_name_english AS category,
     SUM(order_items.price) AS category_sales,
@@ -29,14 +59,16 @@ JOIN product_category_name_translation
 GROUP BY product_category_name_translation.product_category_name_english
 ORDER BY category_sales DESC;
 
--- State-level customer payment and order analysis
+-- Geographic Performance
+
+-- Which customer states generate the most orders and payment value?
 SELECT
     customer_state,
     COUNT(DISTINCT orders.order_id) AS order_count,
     SUM(order_payments.payment_value) AS total_payment_value,
     ROUND(
         SUM(order_payments.payment_value)
-        / COUNT(DISTINCT orders.order_id),
+        / NULLIF(COUNT(DISTINCT orders.order_id), 0),
         2
     ) AS avg_order_value
 FROM customers
@@ -47,7 +79,9 @@ JOIN order_payments
 GROUP BY customer_state
 ORDER BY total_payment_value DESC;
 
--- Seller performance by sales, order volume, AOV, and location
+-- Seller Performance
+
+-- Which sellers generate the most product sales value?
 SELECT
     sellers.seller_id,
     sellers.seller_city,
@@ -56,9 +90,9 @@ SELECT
     COUNT(DISTINCT order_items.order_id) AS order_count,
     ROUND(
         SUM(order_items.price)
-        / COUNT(DISTINCT order_items.order_id),
+        / NULLIF(COUNT(DISTINCT order_items.order_id), 0),
         2
-    ) AS avg_order_value
+    ) AS avg_sales_per_order
 FROM order_items
 JOIN sellers
     ON order_items.seller_id = sellers.seller_id
@@ -68,7 +102,55 @@ GROUP BY
     sellers.seller_state
 ORDER BY total_sales DESC;
 
--- Overall delivery performance
+-- Which sellers have the highest late-delivery rates among sellers with at least 50 delivered orders?
+-- Minimum 50 delivered orders reduces misleading rate rankings from very small seller samples.
+WITH seller_delivery AS (
+    SELECT
+        sellers.seller_id,
+        sellers.seller_city,
+        sellers.seller_state,
+        COUNT(
+            DISTINCT CASE
+                WHEN orders.order_delivered_customer_date IS NOT NULL
+                THEN orders.order_id
+            END
+        ) AS delivered_orders,
+        COUNT(
+            DISTINCT CASE
+                WHEN orders.order_delivered_customer_date IS NOT NULL
+                     AND orders.order_delivered_customer_date > orders.order_estimated_delivery_date
+                THEN orders.order_id
+            END
+        ) AS late_orders
+    FROM orders
+    JOIN order_items
+        ON orders.order_id = order_items.order_id
+    JOIN sellers
+        ON order_items.seller_id = sellers.seller_id
+    GROUP BY
+        sellers.seller_id,
+        sellers.seller_city,
+        sellers.seller_state
+)
+
+SELECT
+    seller_id,
+    seller_city,
+    seller_state,
+    delivered_orders,
+    late_orders,
+    ROUND(
+        late_orders * 100.0 / NULLIF(delivered_orders, 0),
+        2
+    ) AS late_delivery_rate
+FROM seller_delivery
+WHERE delivered_orders >= 50
+ORDER BY late_delivery_rate DESC NULLS LAST;
+
+-- Delivery & Customer Satisfaction
+
+-- What percentage of delivered orders are late?
+-- Orders without a recorded customer delivery date are excluded from the denominator.
 SELECT
     SUM(
         CASE
@@ -78,9 +160,7 @@ SELECT
             ELSE 0
         END
     ) AS late_orders,
-
     COUNT(order_delivered_customer_date) AS delivered_orders,
-
     ROUND(
         SUM(
             CASE
@@ -90,15 +170,12 @@ SELECT
                 ELSE 0
             END
         )::NUMERIC
-        / COUNT(order_delivered_customer_date) * 100,
+        / NULLIF(COUNT(order_delivered_customer_date), 0) * 100,
         2
     ) AS late_delivery_rate
-
 FROM orders;
 
--- Delivery performance vs customer satisfaction
--- CTE means Common Table Expression: a temporary named result that breaks a multi-step analysis into clearer stages.
--- Here, the CTE derives delivery_status first, and the outer query aggregates review scores by that status.
+-- Do late deliveries correspond to lower customer review scores?
 WITH delivery_data AS (
     SELECT
         orders.order_id,
@@ -118,7 +195,6 @@ WITH delivery_data AS (
     WHERE orders.order_delivered_customer_date IS NOT NULL
 )
 
--- COUNT(column) ignores NULL values. AVG(column) calculates the arithmetic mean, conceptually equivalent to SUM(column) / COUNT(column) for non-NULL values.
 SELECT
     delivery_status,
     ROUND(AVG(review_score), 2) AS avg_review_score,
@@ -127,10 +203,9 @@ FROM delivery_data
 GROUP BY delivery_status
 ORDER BY avg_review_score DESC;
 
--- Payment method analysis
--- COUNT, SUM, and AVG calculate metrics over each GROUP BY group.
--- Aliases created with AS give calculated columns readable names and can be used in ORDER BY.
--- This counts payment records, not unique orders, because order_payments can contain multiple rows for one order.
+-- Payment Behavior
+
+-- How do payment methods differ in usage and payment value?
 SELECT
     payment_type,
     COUNT(*) AS payment_count,
@@ -140,14 +215,42 @@ FROM order_payments
 GROUP BY payment_type
 ORDER BY avg_payment_value DESC;
 
--- Repeat customer spending analysis
--- Customer grain matters: the CTE creates one row per customer before comparing customer segments.
--- CASE WHEN turns a numeric condition into a business category such as One-time versus Repeat.
--- A CTE separates customer-level calculations from the final segment-level aggregation.
--- AVG(total_spend) is appropriate for average spend per customer because the CTE contains one row per customer.
+-- Customer Behavior
+
+-- What percentage of customers are repeat purchasers?
+-- customer_unique_id represents the underlying customer across orders.
+WITH customer_orders AS (
+    SELECT
+        customers.customer_unique_id,
+        COUNT(DISTINCT orders.order_id) AS order_count
+    FROM customers
+    JOIN orders
+        ON customers.customer_id = orders.customer_id
+    GROUP BY customers.customer_unique_id
+)
+
+SELECT
+    COUNT(
+        CASE
+            WHEN order_count >= 2 THEN 1
+        END
+    ) AS repeat_customers,
+    COUNT(*) AS total_customers,
+    ROUND(
+        COUNT(
+            CASE
+                WHEN order_count >= 2 THEN 1
+            END
+        )::NUMERIC
+        / NULLIF(COUNT(*), 0) * 100,
+        2
+    ) AS repeat_customer_rate
+FROM customer_orders;
+
+-- Do repeat customers spend more per customer than one-time customers?
 WITH customer_value AS (
     SELECT
-        customer_unique_id,
+        customers.customer_unique_id,
         COUNT(DISTINCT orders.order_id) AS order_count,
         SUM(order_payments.payment_value) AS total_spend
     FROM customers
@@ -155,7 +258,7 @@ WITH customer_value AS (
         ON customers.customer_id = orders.customer_id
     JOIN order_payments
         ON orders.order_id = order_payments.order_id
-    GROUP BY customer_unique_id
+    GROUP BY customers.customer_unique_id
 )
 
 SELECT
