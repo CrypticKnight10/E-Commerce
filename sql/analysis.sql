@@ -45,18 +45,23 @@ ORDER BY month;
 -- Product / Category Performance
 
 -- Which product categories generate the most product sales value?
+-- LEFT JOIN keeps items with no category or no English translation instead of silently dropping them.
 SELECT
-    product_category_name_translation.product_category_name_english AS category,
+    COALESCE(
+        product_category_name_translation.product_category_name_english,
+        products.product_category_name,
+        'uncategorized'
+    ) AS category,
     SUM(order_items.price) AS category_sales,
     COUNT(*) AS items_sold,
     ROUND(AVG(order_items.price), 2) AS avg_item_price
 FROM order_items
 JOIN products
     ON order_items.product_id = products.product_id
-JOIN product_category_name_translation
+LEFT JOIN product_category_name_translation
     ON products.product_category_name =
        product_category_name_translation.product_category_name
-GROUP BY product_category_name_translation.product_category_name_english
+GROUP BY category
 ORDER BY category_sales DESC;
 
 -- Geographic Performance
@@ -104,6 +109,7 @@ ORDER BY total_sales DESC;
 
 -- Which sellers have the highest late-delivery rates among sellers with at least 50 delivered orders?
 -- Minimum 50 delivered orders reduces misleading rate rankings from very small seller samples.
+-- Joining sellers adds location only; seller_id is the sellers primary key, so counts are unchanged.
 WITH seller_delivery AS (
     SELECT
         sellers.seller_id,
@@ -186,7 +192,6 @@ WITH delivery_data AS (
             WHEN orders.order_delivered_customer_date IS NOT NULL
                  AND orders.order_delivered_customer_date <= orders.order_estimated_delivery_date
                 THEN 'On Time'
-            ELSE 'Not Delivered'
         END AS delivery_status,
         order_reviews.review_score
     FROM orders
