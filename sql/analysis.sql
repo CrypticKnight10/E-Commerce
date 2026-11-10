@@ -182,6 +182,7 @@ SELECT
 FROM orders;
 
 -- Do late deliveries correspond to lower customer review scores?
+-- Counts review records: an order with several reviews is counted once per review. Notebook 01 uses each order's latest review instead.
 WITH delivery_data AS (
     SELECT
         orders.order_id,
