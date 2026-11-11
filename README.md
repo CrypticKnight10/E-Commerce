@@ -10,9 +10,9 @@
 
 ## At a glance
 
-| Orders | Customer payments | Avg. order value | Late deliveries | Repeat customers | Sellers |
+| Orders | Customer payments | Avg. order value | Late deliveries | Returning customers | Sellers |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| 99,441 | R$16.0M | R$160.99 | 8.1% | 3.1% | 3,095 |
+| 99,441 | R$16.0M | R$160.99 | 8.1% | 2.2% | 3,095 |
 
 *Sept 2016 to Oct 2018, all money in Brazilian reais (R$).*
 
@@ -22,7 +22,8 @@
 - **Late delivery goes with bad reviews.** 46% of late orders get a 1-star review, against 7% of on-time orders. This is an association, not proof that lateness causes low scores.
 - **A few categories carry the sales.** The top 10 of 74 product categories make up 62% of product sales. Among them, `bed_bath_table` has the most orders but the lowest average review (3.97 vs 4.09 overall).
 - **A small group of sellers drives the marketplace.** The top 20% of sellers make about 83% of product sales, and 130 of 3,095 sellers make half.
-- **Few customers return.** Only 3.1% of customers (2,997 of 96,096) bought more than once, but those who did spent about twice as much (R$315 vs R$162 per customer).
+- **Few customers return.** Only about 2.2% of customers (2,070 of 96,096) came back at least a day after their first order. A simple count of customers with 2+ orders gives 3.1%, but about 31% of those "repeat" customers reordered within a day, which looks like one purchase split into two orders rather than a return visit.
+- **Returning customers spend more, but are too few to drive revenue.** They spend about R$329 each against R$163 for one-time customers, yet make up only 2.2% of customers and 4.4% of revenue.
 
 <table>
   <tr>
@@ -55,6 +56,7 @@ The table relationships are documented in the [ER diagram](docs/erd.md).
 - **Grain first.** An order can have several payments, items, and reviews, so each table is reduced to one row per order before joining. Row counts are checked after every join.
 - **Clear metric definitions.** Customer payment value (`payment_value`) and product sales (`price`, excluding freight) are kept separate. Repeat customers are identified with `customer_unique_id`, not `customer_id`.
 - **Late means delivered after the estimated date.** Undelivered orders are never counted as on time.
+- **Returning is not the same as repeat.** Customers with 2+ orders include split purchases placed minutes apart, so "returning" means a second order at least a day after the first.
 - **Latest review per order.** Where an order has several reviews, the most recent one is used (a SQL window function), so every score is one a customer actually gave.
 - **Data limits.** Months at the edges of the dataset (late 2016, September to October 2018) contain very few orders and are not treated as real trends.
 
@@ -68,7 +70,7 @@ ecommerce/
 │   └── analysis.sql        # 13 business questions in SQL
 ├── notebooks/
 │   ├── 01_business_analysis.ipynb    # delivery, reviews, categories, sellers
-│   ├── 02_customer_analysis.ipynb    # planned: repeat customers, RFM
+│   ├── 02_customer_analysis.ipynb    # repeat customers and customer value
 │   └── 03_delivery_prediction.ipynb  # planned: late-delivery model
 ├── scripts/download_data.py          # reproducible data download
 ├── docs/                             # ER diagram and project specification
@@ -104,7 +106,8 @@ Then open `notebooks/01_business_analysis.ipynb` and run all cells, or run `sql/
 - [x] PostgreSQL schema, data loading, and ER diagram
 - [x] SQL business analysis (13 questions)
 - [x] Python analysis: delivery, reviews, categories, seller concentration
-- [ ] Customer analysis: repeat behaviour and RFM segments
+- [x] Customer analysis: repeat and returning customers
+- [x] Customer value: RFM table, returning vs one-time customers (full RFM scoring skipped: 97.8% of customers buy on only one day)
 - [ ] Tableau executive dashboard
 - [ ] Late-delivery classification model (using only information known before delivery)
 - [ ] Final recommendations
